@@ -1,46 +1,31 @@
 *** CS261 -- Data Structures
 
-We were taught C++ mostly as a vehicle for understanding the fundamentals of 
-programming (particularly OOP). Since we weren't being trained to be C++ gurus, 
-and the classes were taught at an accelerated pace, the code is often wonky and 
-meandering. Just as often, a strange choice in included libraries or an 
-unintuitive implementation was a reflection of limitations imposed by the 
-instructor's preferences and the school's server, which in late 2016 was running
-a version of g++ that balked at anything newer than C++98. Half the time, I was 
-joyful nearly to the point of tears just to see a clean compile.
+Data Structures was mostly concerned with theory and implementation of ADTs. As 
+the course went on, the previous week's assignments were often used to support
+the next. Though it's unlikely (inadvisable, even) I'll roll my own ADTs in real
+life scenarios, doing so and juggling dynamic memory management in C turned out
+to be beneficial when understanding future problems, particularly in 325.
 
-Tic Tac Toe:
+Stackapp:
 
-    Board.cpp / Board.hpp
-    TicTacToe.cpp / TicTacToe.hpp
+    stackapp.c
+    dynamicArray.c / dynArray.h
+    testDynArray.c
 
-        The instructor for this course explicitly forbade us to use the ternary
-        operator, which I was a-okay with at the time because it looked to the
-        beginning coder to be utterly incomprehensible. Now that I've had some
-        more experience, I'm taken by its utility; it's sometimes far more clear
-        than the equivalent if/else construct. 
+        The functions are so basic that it is hard to code correctly and get it
+        wrong, and so much of the dynamicArray.c file is skeleton code that it 
+        seemed silly to show their comparison, so I haven't included the first 
+        attempt. However, I felt it necessary to start fresh to ensure that
+        stackapp.c could rely on a robust data structure.
         
-        I likely could have made this more memory efficient by passing pointers
-        and such, but performance in a TicTacToe game is not quite as worthy of
-        consideration as developer time, so I figured the aesthetic refactoring
-        was enough to show some progress. 
+        The test with unit tests is mostly written by course staff, with the one
+        exception of the actual() function. I thought it strange that it printed
+        only what it expected and not the actual contents.
         
-        With that in mind, I found myself wondering if I could get the whole
-        program down to less than 200 lines by using libraries other than the
-        absolute essentials, especially when doing tedious things such as 
-        validating and standardizing input. 
+        Stackapp does not have a previous incarnation. I ran out of time (which
+        you'll notice is a common theme from this quarter in general, as I took
+        261, 271, 290, and 340 concurrently), before I could give it a decent
+        attempt, and simply included the file as a stub to ensure there were no
+        issues regarding the makefile.
         
-        The original gameState method was such an embarrassing nightmare that I
-        simply had to create some helpers, which was something I was afraid of
-        doing for fear of losing precious grade points. Being able to generalize
-        and determine win states programmatically instead of writing a forest of
-        if statements helped me realize how far I've come.  
-
-Miscellaneous:
-            
-    converter.cpp
-        
-        A first foray into recursion. Recursion didn't "sink in" until CS325,
-        and it shows. I resisted the urge to look at my first attempt, but it
-        wouldn't have helped, because I have no idea how I thought those were
-        supposed to work.
+        main() and nextChar() came with the file. The rest is mine.
