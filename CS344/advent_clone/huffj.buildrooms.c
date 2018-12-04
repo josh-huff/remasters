@@ -1,11 +1,10 @@
-//
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
 
-typedef struct{
+typedef struct Room{
 	int id;
 	char* name;
 	char* type;
@@ -27,18 +26,14 @@ char* roomTypes[] = {
 
 // Prototypes
 void initRooms(Room* rms[]);
-void printRoomsState(Room* rms[]){
-    printf("Current state of Rooms array:\n");
-    for(int i = 0; i < 7; i++){
-        printf("Room[%d] -- ID: %d, Name: %s, Type: %s, Connections: %d\n", 
-            i + 1,
-            rms[i]->id,
-            rms[i]->name,
-            rms[i]->type,
-            rms[i]->numConnections
-        );
-    }
-}
+void makeConnections(Room* rms[]);
+bool isValidConnection(Room* a, Room* b);
+bool isNewNeighbor(Room* a, Room* b);
+bool isDifferentRoom(Room* a, Room* b); 
+bool isAvailable(Room* b);
+void connectRooms(Room* a, Room* b);
+void printRoomsState(Room* rms[]);
+void printConnState(Room* rms[], int current);
 
 int main(){
 
@@ -48,74 +43,63 @@ int main(){
     initRooms(rooms);
     printRoomsState(rooms);
 
+    makeConnections(rooms);
+    printRoomsState(rooms);
+    
+    //createRoomFiles();
+
     return 0;
 }
 
-/*
+void makeConnections(Room* rms[]){
+    int numToMake, k;
 
-Each file that stores a room must have exactly this form, where the … is additional room connections, as randomly generated:
-
-ROOM NAME: <room name>
-CONNECTION 1: <room name>
-…
-ROOM TYPE: <room type>
-    
-    The method of choosing the number of connections beforehand 
-    that each room will have is not recommended, 
-    as it's hard to make those chosen numbers match the constraints. 
-*/
-
-/*
-void initRooms(Room* rms[]){
-    int nameTaken[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    int name, type;
-    
     for(int i = 0; i < 7; i++){
-        rms[i] = malloc(sizeof(Room));
-        if(rms[i] == NULL){
-            perror("Malloc failed when init'ing room %d\n", i);
-        }
-
-        // Choose a unique name at random
-        while(true){
-            name = rand() % 10;
-            if(!nameTaken[name]){
-                nameTaken[name] = 1;
-                break;
+        numToMake = (rand() % 4) + 3;
+        while(rms[i]->numConnections < numToMake){
+            k = rand() % 7;           
+            if(isValidConnection(rms[i], rms[k])){
+                connectRooms(rms[i], rms[k]);
             }
-        }
-
-        // Make first room start, last room end, all others middle
-        switch(i){
-            case 0:
-                type = 0; // make it startroom
-                break;
-            case 6:            
-                type = 2; // make it endroom
-                break;
-            default:
-                type = 1; // make it midroom
-        }
-        
-        rms[i]->name = roomNames[name]; // Might have to strcpy() instead
-        rms[i]->id = i;
-        rms[i]->type = roomTypes[type];
-        rms[i]->numConnections = 0;        
+        } 
     }
 }
 
-isConnected(); // Because a room can't connect to another room more than once
-isSelf(); // Because a room can't connect to itself.
-isAvailable();
-connectRooms(roomA, roomB){
-
-    // if room A connects to room B, 
-    // then room B must have a connection back to room A
-    connectTo(roomA, roomB);
-    connectTo(roomB, roomA);
+bool isValidConnection(Room* a, Room* b){
+    return  isDifferentRoom(a, b) &&
+            isNewNeighbor(a, b) &&
+            isAvailable(b);
 }
-connectTo(roomA, roomB);
-*/
+
+// A room can't connect to itself.
+bool isDifferentRoom(Room* a, Room* b){
+    return a->id != b->id;
+}
+
+// A room can't connect to another room more than once
+bool isNewNeighbor(Room* a, Room* b){
+    for(int i = 0; i < a->numConnections; i++){
+        if(a->connections[i] == b){
+            return false;
+        }
+    }
+    return true;
+}
+
+// A room must not exceed 6 connections
+bool isAvailable(Room* b){
+    return b->numConnections < 6;
+}
+
+// If room A connects to room B, then room B connects to room A
+void connectRooms(Room* a, Room* b){
+    a->connections[a->numConnections] = b;
+    a->numConnections++;
+
+    b->connections[b->numConnections] = a;
+    b->numConnections++;
+}
+
 void initRooms(Room* rms[]){
     int nameTaken[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     int name, type;
@@ -151,6 +135,34 @@ void initRooms(Room* rms[]){
         rms[i]->id = i;
         rms[i]->type = roomTypes[type];
         rms[i]->numConnections = 0;        
+    }
+}
+
+void printRoomsState(Room* rms[]){
+    printf("Current state of Rooms array:\n");
+    for(int i = 0; i < 7; i++){
+        printf("Room[%d] -- ID: %d, Name: %s, Type: %s, NumConns: %d\n", 
+            i + 1,
+            rms[i]->id,
+            rms[i]->name,
+            rms[i]->type,
+            rms[i]->numConnections
+        );
+        
+        if(rms[i]->numConnections > 0){
+            printConnState(rms, i);
+        }
+    }
+    printf("\n");
+}
+
+void printConnState(Room* rms[], int current){
+    printf("Connections:\n");
+    for(int k = 0; k < rms[current]->numConnections; k++){
+        printf("\tRoom[%d] --Name: %s\n", 
+            k + 1,
+            rms[current]->connections[k]->name
+        );
     }
 }
 
