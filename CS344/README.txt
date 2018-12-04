@@ -1,3 +1,30 @@
 *** CS344 -- Operating Systems
 
-    Coming Soon
+Operating Systems focused on Unix and its derivatives, particularly how concepts
+like memory, processes, signals work. In my instructor evaluation, I apologized
+to the professor, because his course was easily among the best designed in the 
+entire program, and it almost felt like I did him a disservice by barely ekeing
+out a passing grade.
+
+I'm making up for it now by revisiting the projects that gave me the most grief.
+
+Adventure:
+
+    huffj.buildrooms.c
+
+        If I'd taken the time to watch the lectures one extra time, and really
+        let the power of the Unix philosophy sink in, there wouldn't have been 
+        the ugly nightmare you see below the much more economical (and much more
+        readable) version I came up with in a couple hours. I even took a break
+        to enjoy some grub and watch Jeopardy, comfortable in the knowledge that
+        I would finish this before bed. Whereas when I was taking the course, I 
+        stubbornly got married to strcat(), not understanding that failing to be 
+        familiar with the arrow operator and snprintf() cost me several days.
+        
+        Y'know. To save time. To a man with a hammer, every problem is a nail. 
+
+        Lesson learned: don't be that guy!
+
+    huffj.adventure.c
+    
+        Coming Soon!
