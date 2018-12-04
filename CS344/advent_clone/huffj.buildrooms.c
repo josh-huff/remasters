@@ -1,5 +1,7 @@
 //
+#include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 
@@ -25,13 +27,26 @@ char* roomTypes[] = {
 
 // Prototypes
 void initRooms(Room* rms[]);
+void printRoomsState(Room* rms[]){
+    printf("Current state of Rooms array:\n");
+    for(int i = 0; i < 7; i++){
+        printf("Room[%d] -- ID: %d, Name: %s, Type: %s, Connections: %d\n", 
+            i + 1,
+            rms[i]->id,
+            rms[i]->name,
+            rms[i]->type,
+            rms[i]->numConnections
+        );
+    }
+}
 
 int main(){
 
 	srand(time(NULL));
 
     Room* rooms[7];
-    initRooms(&rooms);
+    initRooms(rooms);
+    printRoomsState(rooms);
 
     return 0;
 }
@@ -108,7 +123,7 @@ void initRooms(Room* rms[]){
     for(int i = 0; i < 7; i++){
         rms[i] = malloc(sizeof(Room));
         if(rms[i] == NULL){
-            perror("Malloc failed when init'ing room %d\n", i);
+            perror("Malloc failed when init'ing room\n");
         }
 
         // Choose a unique name at random
