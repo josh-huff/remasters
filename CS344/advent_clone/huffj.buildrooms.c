@@ -1,8 +1,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <time.h>
-
+#include <unistd.h>
 
 typedef struct Room{
 	int id;
@@ -32,8 +34,7 @@ bool isNewNeighbor(Room* a, Room* b);
 bool isDifferentRoom(Room* a, Room* b); 
 bool isAvailable(Room* b);
 void connectRooms(Room* a, Room* b);
-void printRoomsState(Room* rms[]);
-void printConnState(Room* rms[], int current);
+void createRoomFiles(Room* rms[]);
 
 int main(){
 
@@ -41,13 +42,15 @@ int main(){
 
     Room* rooms[7];
     initRooms(rooms);
-    printRoomsState(rooms);
 
     makeConnections(rooms);
-    printRoomsState(rooms);
     
-    //createRoomFiles();
-
+    createRoomFiles(rooms);
+    
+    for(int i = 0; i < 7; i++){
+        free(rooms[i]);
+    }
+    
     return 0;
 }
 
@@ -122,65 +125,54 @@ void initRooms(Room* rms[]){
         // Make first room start, last room end, all others middle
         switch(i){
             case 0:
-                type = 0; // make it startroom
+                type = 0;
                 break;
             case 6:            
-                type = 2; // make it endroom
+                type = 2;
                 break;
             default:
-                type = 1; // make it midroom
+                type = 1;
         }
         
-        rms[i]->name = roomNames[name]; // Might have to strcpy() instead
+        rms[i]->name = roomNames[name];
         rms[i]->id = i;
         rms[i]->type = roomTypes[type];
         rms[i]->numConnections = 0;        
     }
 }
 
-void printRoomsState(Room* rms[]){
-    printf("Current state of Rooms array:\n");
+void createRoomFiles(Room* rms[]){
+
+    // Create directory called huffj.rooms.{PID}
+    char dirPath[20];
+    memset(dirPath, '\0', 20);    
+    snprintf(dirPath, 20, "huffj.rooms.%d", getpid());
+	mkdir(dirPath, 0755);
+
+    char fullPath[50];    
+    FILE* fileHandle;
+    
+    // Create file for each room, listing attributes
     for(int i = 0; i < 7; i++){
-        printf("Room[%d] -- ID: %d, Name: %s, Type: %s, NumConns: %d\n", 
-            i + 1,
-            rms[i]->id,
-            rms[i]->name,
-            rms[i]->type,
-            rms[i]->numConnections
-        );
+        memset(fullPath, '\0', 50);
+        snprintf(fullPath, 50, "%s/%s_room", dirPath, rms[i]->name);
         
-        if(rms[i]->numConnections > 0){
-            printConnState(rms, i);
+        fileHandle = fopen(fullPath, "w");
+        if(fileHandle == NULL){
+            perror("Error opening room file for writing.\n");
         }
-    }
-    printf("\n");
+        
+        fprintf(fileHandle, "ROOM NAME: %s\n", rms[i]->name);
+        for(int k = 0; k < rms[i]->numConnections; k++){
+            fprintf(fileHandle, "CONNECTION %d: %s\n", 
+                k + 1, 
+                rms[i]->connections[k]->name
+            );
+        }
+        fprintf(fileHandle, "ROOM TYPE: %s", rms[i]->type);
+        fclose(fileHandle);
+    }    
 }
-
-void printConnState(Room* rms[], int current){
-    printf("Connections:\n");
-    for(int k = 0; k < rms[current]->numConnections; k++){
-        printf("\tRoom[%d] --Name: %s\n", 
-            k + 1,
-            rms[current]->connections[k]->name
-        );
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /************************************************************
