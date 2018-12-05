@@ -19,13 +19,16 @@ typedef struct Room{
 void makeRoomsFromFile(Room* rms[]);
 char* getNewestDir();
 void* getFromFile(FILE* fileHandle, char* option);
+void populateRoomArray(Room* rms[], DIR* rdir, char* prefix, char* path);
 void initRoom(Room* rms[], int id, char* name, char* type, int numConn);
-void populateConnections(Room* rms[]);
+void populateConnections(Room* rms[], char* prefix, char* path);
+void initConnections(Room* rms[], int id, FILE* fh);
+int lookupByName(Room* rms[], char* query);
+bool endRoomFound(Room* currentRoom);
 void playerInterface(Room* currentRoom);
 bool isValidRoom(Room* rms[], char* inputName);
 void errorMsg();
 void gameOverMsg(Room* rms[], int* history[], int numSteps);
-void printRoomsState(Room* rms[]);
 
 int main(){
 
@@ -36,58 +39,44 @@ int main(){
 
     Room* rooms[7];
     makeRoomsFromFile(rooms);
-//    printRoomsState(rooms);
+    
+    int numSteps = 0;
+    Room* currRoom;
+    for(int i = 0; i < 7; i++){
+        if(strcmp(rooms[i]->type, "START_ROOM")){
+            currRoom = rooms[i];
+        }
+    }
+    
+    while(true){
 
-    //getline();
+        playerInterface(currRoom);
+        break;//getline();    
+        numSteps++;
+
+        if(endRoomFound){
+            gameOverMsg(rooms, history, numSteps);            
+            break;
+        }
+    }
     
     return 0;
 }
 
 void makeRoomsFromFile(Room* rms[]){
   
-    FILE* fH;
-    char fullPath[512]; // Just to shut up gcc warnings. The max is about 50.    
-    struct dirent *currFile;    
-    int id, numConnections, i = 0;
-    char* name;
-    char* type;
+    char fullPath[512]; // Just to shut up gcc warnings. The max is about 50.       
      
     // Look in most recent directory    
     char* prefix = getNewestDir();
     memset(fullPath, '\0', 512);
-    snprintf(fullPath, 512, "%s", prefix); 
+    snprintf(fullPath, 512, "%s", prefix);
+     
     DIR* roomsDir = opendir(fullPath);
-
-    while(i < 7){
-
-        currFile = readdir(roomsDir);
-        if(currFile){    
-            memset(fullPath, '\0', 512);
-            if(strcmp(currFile->d_name, ".") == 0 || 
-                strcmp(currFile->d_name, "..") == 0){
-                continue;
-            }
-            snprintf(fullPath, 512, "%s/%s", prefix, currFile->d_name);
-             
-            fH = fopen(fullPath, "r");
-            if(fH == NULL){
-                perror("Error opening room file for reading.\n");
-            }
-           
-            id = i;   
-            name = (char*) getFromFile(fH, "NAME:");
-            numConnections = *((int*) getFromFile(fH, "CONNECTION"));
-            type = (char*) getFromFile(fH, "TYPE:");
-
-            initRoom(rms, i, name, type, numConnections);
-            
-            fclose(fH);
-            i++;
-        }
-
-    }
-        
+    populateRoomArray(rms, roomsDir, prefix, fullPath);       
     closedir(roomsDir);
+    
+    populateConnections(rms, prefix, fullPath);
 }
 
 void* getFromFile(FILE* fileHandle, char* option){
@@ -131,6 +120,41 @@ void* getFromFile(FILE* fileHandle, char* option){
     }
 }
 
+void populateRoomArray(Room* rms[], DIR* rdir, char* prefix, char* fullPath){
+    FILE* fH;
+    struct dirent *currFile;
+    int id, numConnections, i = 0;
+    char* name;
+    char* type;
+    
+    while(i < 7){
+
+        currFile = readdir(rdir);
+        if(currFile){    
+            if(strcmp(currFile->d_name, ".") == 0 || 
+                strcmp(currFile->d_name, "..") == 0){
+                continue;
+            }
+            snprintf(fullPath, 512, "%s/%s", prefix, currFile->d_name);
+             
+            fH = fopen(fullPath, "r");
+            if(fH == NULL){
+                perror("Error opening room file for reading.\n");
+            }
+           
+            id = i;   
+            name = (char*) getFromFile(fH, "NAME:");
+            numConnections = *((int*) getFromFile(fH, "CONNECTION"));
+            type = (char*) getFromFile(fH, "TYPE:");
+
+            initRoom(rms, i, name, type, numConnections);
+            
+            fclose(fH);
+            i++;
+        }
+    }
+}
+
 void initRoom(Room* rms[], int id, char* name, char* type, int numConn){
     
     rms[id] = malloc(sizeof(Room));
@@ -144,10 +168,65 @@ void initRoom(Room* rms[], int id, char* name, char* type, int numConn){
     rms[id]->numConnections = numConn;
 }
 
-void populateConnections(Room* rms[]){
-    for(int i = 0; i < 7; i++){
-        for(int k = 0; k < rms[i]->numConnections; k++){
+void populateConnections(Room* rms[], char* prefix, char* fullPath){
+
+    FILE* fH;
+    memset(fullPath, '\0', 512);
+    snprintf(fullPath, 512, "%s", prefix);
+    DIR* rdir = opendir(fullPath);
+    struct dirent *currFile;
+    int i = 0;
+    while(i < 7){
+        currFile = readdir(rdir);
+
+        if(currFile){
+            if(strcmp(currFile->d_name, ".") == 0 || 
+                strcmp(currFile->d_name, "..") == 0){
+                continue;
+            }
+            snprintf(fullPath, 512, "%s/%s", prefix, currFile->d_name);
+          
+            fH = fopen(fullPath, "r");
+            if(fH == NULL){
+                perror("Error opening room file for reading.\n");
+            }
             
+            initConnections(rms, i, fH);
+            
+            fclose(fH);
+        }
+            i++;
+    }
+    closedir(rdir);
+}
+
+void initConnections(Room* rms[], int i, FILE* fh){
+    size_t maxLineSize = 40;
+    char* currentLine = malloc(40);
+    char* currentToken;
+    int gl_rv, connToAdd;
+
+    for(int k = 0; k < rms[i]->numConnections; k++){
+        gl_rv = getline(&currentLine, &maxLineSize, fh);
+        while(gl_rv > 0){
+            currentToken = strtok(currentLine, " ");
+            if(strcmp(currentToken, "CONNECTION") == 0){
+                currentToken = strtok(NULL, " ");
+                currentToken = strtok(NULL, " ");
+                currentToken[strcspn(currentToken,"\n")] = 0;
+                connToAdd = lookupByName(rms, currentToken);
+                break;
+            }
+            gl_rv = getline(&currentLine, &maxLineSize, fh);
+        }            
+        rms[i]->connections[k] = rms[connToAdd];
+    }
+}
+
+int lookupByName(Room* rms[], char* query){
+    for(int i = 0; i < 7; i++){
+        if(strcmp(rms[i]->name, query) == 0){
+            return i;        
         }
     }
 }
@@ -183,13 +262,17 @@ char* getNewestDir(){
     return newestDir;
 }
 
+bool endRoomFound(Room* currentRoom){
+    return strcmp(currentRoom->type, "END_ROOM") == 0;
+}
+
 void playerInterface(Room* currentRoom){
-    printf("CURRENT LOCATION: %s\n", currentRoom->name);
+    printf("CURRENT LOCATION: %s\nPOSSIBLE CONNECTIONS:", currentRoom->name);
     for(int i = 0; i < currentRoom->numConnections; i++){
-        printf("%s", currentRoom->connections[i]->name);
-        printf("%c\n", (i < currentRoom->numConnections - 1) ? ',' : '.');
+        printf(" %s", currentRoom->connections[i]->name);
+        printf("%c", (i < currentRoom->numConnections - 1) ? ',' : '.');
     }
-    printf("WHERE TO? >");
+    printf("\nWHERE TO? >");
 }
 
 bool isValidRoom(Room* rms[], char* inputName){
@@ -215,20 +298,6 @@ void gameOverMsg(Room* rms[], int* history[], int numSteps){
         printf("%s\n", rms[i]->name);
     }
 }
-
-void printRoomsState(Room* rms[]){
-    printf("Current state of Rooms array:\n");
-    for(int i = 0; i < 7; i++){
-        printf("Room[%d] -- ID: %d, Name: %s, Type: %s, Connections: %d\n", 
-            i + 1,
-            rms[i]->id,
-            rms[i]->name,
-            rms[i]->type,
-            rms[i]->numConnections
-        );
-    }
-}
-
 
 
 
