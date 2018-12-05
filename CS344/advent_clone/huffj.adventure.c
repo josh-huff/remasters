@@ -19,8 +19,8 @@ typedef struct Room{
 void makeRoomsFromFile(Room* rms[]);
 char* getNewestDir();
 void* getFromFile(FILE* fileHandle, char* option);
-void initRoom(Room* rm, int id, char* name, char* type, int numConn);
-//void populateConnections(Room* rms[]);
+void initRoom(Room* rms[], int id, char* name, char* type, int numConn);
+void populateConnections(Room* rms[]);
 void playerInterface(Room* currentRoom);
 bool isValidRoom(Room* rms[], char* inputName);
 void errorMsg();
@@ -36,7 +36,7 @@ int main(){
 
     Room* rooms[7];
     makeRoomsFromFile(rooms);
-    printRoomsState(rooms);
+//    printRoomsState(rooms);
 
     //getline();
     
@@ -44,41 +44,47 @@ int main(){
 }
 
 void makeRoomsFromFile(Room* rms[]){
-    
-    FILE* fileHandle;
+  
+    FILE* fH;
     char fullPath[512]; // Just to shut up gcc warnings. The max is about 50.    
-    struct dirent *currentFile;    
-    int id, numConnections;
-    char* name, type;
-    
+    struct dirent *currFile;    
+    int id, numConnections, i = 0;
+    char* name;
+    char* type;
+     
     // Look in most recent directory    
     char* prefix = getNewestDir();
-    snprintf(fullPath, 512, "%s", prefix);
+    memset(fullPath, '\0', 512);
+    snprintf(fullPath, 512, "%s", prefix); 
     DIR* roomsDir = opendir(fullPath);
-    
-    while(roomsDir){
 
-        currentFile = readdir(roomsDir);
-        while(currentFile){    
+    while(i < 7){
 
+        currFile = readdir(roomsDir);
+        if(currFile){    
             memset(fullPath, '\0', 512);
-            snprintf(fullPath, 512, "%s/%s_room", prefix, currentFile->d_name);
-            
-            fileHandle = fopen(fullPath, "r");
-            if(fileHandle == NULL){
+            if(strcmp(currFile->d_name, ".") == 0 || 
+                strcmp(currFile->d_name, "..") == 0){
+                continue;
+            }
+            snprintf(fullPath, 512, "%s/%s", prefix, currFile->d_name);
+             
+            fH = fopen(fullPath, "r");
+            if(fH == NULL){
                 perror("Error opening room file for reading.\n");
             }
+           
+            id = i;   
+            name = (char*) getFromFile(fH, "NAME:");
+            numConnections = *((int*) getFromFile(fH, "CONNECTION"));
+            type = (char*) getFromFile(fH, "TYPE:");
+
+            initRoom(rms, i, name, type, numConnections);
             
-            for(int i = 0; i < 7; i++){
-                id = 0;
-                name = (char*) getFromFile(fileHandle, "NAME");
-                type = *((char*) getFromFile(fileHandle, "TYPE"));
-                numConnections = *((int*) getFromFile(fileHandle, "CONNECTION"));
-                initRoom(rms[i], i, name, &type, numConnections);
-            }
-            
-            fclose(fileHandle);
+            fclose(fH);
+            i++;
         }
+
     }
         
     closedir(roomsDir);
@@ -87,45 +93,57 @@ void makeRoomsFromFile(Room* rms[]){
 void* getFromFile(FILE* fileHandle, char* option){
     size_t maxLineSize = 40;
     char* currentLine = malloc(40);
-    char* currentToken, rmName;
-    int* int_attr;
-    char* char_attr;    
-    int connCount = 0;
+    char* currentToken;
+    int gl_rv;
+
+    fseek(fileHandle, 0, SEEK_SET);
     
-    while(getline(&currentLine, &maxLineSize, fileHandle)){
-        currentToken = strtok(currentLine, " ");
-        if(strcmp(currentToken, option) == 0){
-            connCount++;
-            continue;
-        }else{
-            currentToken = strtok(currentLine, " ");
+    if(strcmp(option, "NAME:") == 0 || strcmp(option, "TYPE:") == 0){
+        char* char_attr = (char*) malloc(50);
+        gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
+
+        while(gl_rv > 0){
+            currentToken = strtok(currentLine, " "); 
+            currentToken = strtok(NULL, " ");
             if(strcmp(currentToken, option) == 0){
-                currentToken = strtok(currentLine, " ");
-                char_attr = malloc(50);
+            currentToken = strtok(NULL, " ");
+
                 memset(char_attr, '\0', 50);
                 strcpy(char_attr, currentToken);
+                char_attr[strcspn(char_attr,"\n")] = 0;
                 return (void*) char_attr;
-            }            
+            }
+            gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
+        }           
+    }else{
+        int connCount = 0;
+        gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
+        while(gl_rv > 0){
+            currentToken = strtok(currentLine, " ");
+            if(strcmp(currentToken, option) == 0){
+                connCount++;
+            }
+            gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
         }
-    }    
-    int_attr = (int*) malloc(sizeof(int));
-    *int_attr = connCount;
-    return (void*) int_attr;
+        int* int_attr = (int*) malloc(sizeof(int));
+        *int_attr = connCount;
+        return (void*) int_attr;    
+    }
 }
 
-void initRoom(Room* rm, int id, char* name, char* type, int numConn){
+void initRoom(Room* rms[], int id, char* name, char* type, int numConn){
     
-    rm = malloc(sizeof(Room));
-    if(rm == NULL){
+    rms[id] = malloc(sizeof(Room));
+    if(rms[id] == NULL){
         perror("Malloc failed when init'ing room\n");
     }
     
-    rm->name = name;
-    rm->id = id;
-    rm->type = type;
-    rm->numConnections = numConn;
+    rms[id]->name = name;
+    rms[id]->id = id;
+    rms[id]->type = type;
+    rms[id]->numConnections = numConn;
 }
-/*
+
 void populateConnections(Room* rms[]){
     for(int i = 0; i < 7; i++){
         for(int k = 0; k < rms[i]->numConnections; k++){
@@ -133,7 +151,7 @@ void populateConnections(Room* rms[]){
         }
     }
 }
-*/
+
 char* getNewestDir(){
 
     DIR* currentDir;
@@ -146,11 +164,10 @@ char* getNewestDir(){
     char* newestDir = malloc(50); 
 
     currentDir = opendir(".");
-    while(currentDir){
-
+    if(currentDir){
         currentFile = readdir(currentDir);
-        while(currentFile){
-            if(strcmp(currentFile->d_name, prefix) == 0){
+        while(currentFile){ 
+            if(strstr(currentFile->d_name, prefix)){       
                 stat(currentFile->d_name, &attributes);
                 if((int) attributes.st_mtime > mostRecent){
                     mostRecent = (int) attributes.st_mtime;
@@ -158,11 +175,11 @@ char* getNewestDir(){
                     strcpy(newestDir, currentFile->d_name);
                 }
             }
+            currentFile = readdir(currentDir);
         }
     }
         
-    closedir(currentDir);
-    
+    closedir(currentDir);  
     return newestDir;
 }
 
