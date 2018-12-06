@@ -169,7 +169,7 @@ void createRoomFiles(Room* rms[]){
                 rms[i]->connections[k]->name
             );
         }
-        fprintf(fileHandle, "ROOM TYPE: %s", rms[i]->type);
+        fprintf(fileHandle, "ROOM TYPE: %s\n", rms[i]->type);
         fclose(fileHandle);
     }    
 }
