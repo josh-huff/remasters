@@ -18,48 +18,83 @@ typedef struct Room{
 // Prototypes
 void makeRoomsFromFile(Room* rms[]);
 char* getNewestDir();
-void* getFromFile(FILE* fileHandle, char* option);
+char* getFromFile(FILE* fileHandle, char* option);
+int getNumConnFromFile(FILE* fileHandle);
 void populateRoomArray(Room* rms[], DIR* rdir, char* prefix, char* path);
 void initRoom(Room* rms[], int id, char* name, char* type, int numConn);
 void populateConnections(Room* rms[], char* prefix, char* path);
 void initConnections(Room* rms[], int id, FILE* fh);
 int lookupByName(Room* rms[], char* query);
 bool endRoomFound(Room* currentRoom);
-void playerInterface(Room* currentRoom);
+void prompt(Room* currentRoom);
+Room* getPlayerInput(Room* rms[], Room* currRoom);
 bool isValidRoom(Room* rms[], char* inputName);
+bool isConnected(Room* rms[], Room* self, char* playerInput);
 void errorMsg();
-void gameOverMsg(Room* rms[], int* history[], int numSteps);
+void gameOverMsg(Room* rms[], int history[], int numSteps);
 
 int main(){
 
-    int history[128]; // For people who are terrible at mazes, like myself.
-    for(int i = 0; i < 128; i++){
-        history[i] = 8;
-    }
-
     Room* rooms[7];
-    makeRoomsFromFile(rooms);
-    
-    int numSteps = 0;
     Room* currRoom;
+    Room* destination;
+    makeRoomsFromFile(rooms);
+    int numSteps = 0;
+    
+    // Generous history size for people who are terrible at mazes, like myself.    
+    int history[128];
+    for(int i = 0; i < 128; i++){
+        //history[i] = malloc(sizeof(int));
+        //if(history[i] == NULL){
+        //    perror("Malloc failed when creating history\n");
+        //}
+        history[i] = 8; // Init to a known impossible value, for debugging
+    }
+    
+    // Establish starting room
     for(int i = 0; i < 7; i++){
-        if(strcmp(rooms[i]->type, "START_ROOM")){
+        if(strcmp(rooms[i]->type, "START_ROOM") == 0){
             currRoom = rooms[i];
         }
     }
     
-    while(true){
+    do{   
+        prompt(currRoom);
+        destination = getPlayerInput(rooms, currRoom); 
 
-        playerInterface(currRoom);
-        break;//getline();    
-        numSteps++;
+        if(destination != currRoom){
+            history[numSteps] = destination->id;
+            numSteps++;
+            currRoom = destination;
+        }
 
-        if(endRoomFound){
+        if(endRoomFound(currRoom)){
             gameOverMsg(rooms, history, numSteps);            
             break;
         }
+    }while(true);
+/*
+    for(int k = 0; k < 128; k++){
+        free(history[k]);
+    }    
+*/    for(int i = 0; i < 7; i++){
+//        free(rooms[i]->name);
+//        free(rooms[i]->type);
+//          free(rooms[i]); 
+        if(rooms[i]->name != NULL){
+            free(rooms[i]->name);
+        }
+        
+        if(rooms[i]->type != NULL){
+            free(rooms[i]->type);
+        }
+
+        if(rooms[i] != NULL){
+            free(rooms[i]);
+        }
     }
-    
+
+
     return 0;
 }
 
@@ -75,11 +110,12 @@ void makeRoomsFromFile(Room* rms[]){
     DIR* roomsDir = opendir(fullPath);
     populateRoomArray(rms, roomsDir, prefix, fullPath);       
     closedir(roomsDir);
-    
     populateConnections(rms, prefix, fullPath);
+    free(prefix);
 }
 
-void* getFromFile(FILE* fileHandle, char* option){
+//void* getFromFile(FILE* fileHandle, char* option){
+char* getFromFile(FILE* fileHandle, char* option){
     size_t maxLineSize = 40;
     char* currentLine = malloc(40);
     char* currentToken;
@@ -100,25 +136,33 @@ void* getFromFile(FILE* fileHandle, char* option){
                 memset(char_attr, '\0', 50);
                 strcpy(char_attr, currentToken);
                 char_attr[strcspn(char_attr,"\n")] = 0;
+                free(currentLine);
                 return (void*) char_attr;
             }
             gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
         }           
-    }else{
-        int connCount = 0;
-        gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
-        while(gl_rv > 0){
-            currentToken = strtok(currentLine, " ");
-            if(strcmp(currentToken, option) == 0){
-                connCount++;
-            }
-            gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
-        }
-        int* int_attr = (int*) malloc(sizeof(int));
-        *int_attr = connCount;
-        return (void*) int_attr;    
     }
 }
+
+int getNumConnFromFile(FILE* fileHandle){
+    size_t maxLineSize = 40;
+    char* currentLine = malloc(40);
+    char* currentToken;
+    int gl_rv;
+    int connCount = 0;
+
+    gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
+    while(gl_rv > 0){
+        currentToken = strtok(currentLine, " ");
+        if(strcmp(currentToken, "CONNECTION") == 0){
+            connCount++;
+        }
+        gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
+    }
+    free(currentLine);
+    return connCount;    
+}
+
 
 void populateRoomArray(Room* rms[], DIR* rdir, char* prefix, char* fullPath){
     FILE* fH;
@@ -144,11 +188,10 @@ void populateRoomArray(Room* rms[], DIR* rdir, char* prefix, char* fullPath){
            
             id = i;   
             name = (char*) getFromFile(fH, "NAME:");
-            numConnections = *((int*) getFromFile(fH, "CONNECTION"));
+            numConnections = getNumConnFromFile(fH);
             type = (char*) getFromFile(fH, "TYPE:");
 
             initRoom(rms, i, name, type, numConnections);
-            
             fclose(fH);
             i++;
         }
@@ -195,7 +238,8 @@ void populateConnections(Room* rms[], char* prefix, char* fullPath){
             
             fclose(fH);
         }
-            i++;
+        
+        i++;
     }
     closedir(rdir);
 }
@@ -219,8 +263,9 @@ void initConnections(Room* rms[], int i, FILE* fh){
             }
             gl_rv = getline(&currentLine, &maxLineSize, fh);
         }            
-        rms[i]->connections[k] = rms[connToAdd];
+        rms[i]->connections[k] = rms[connToAdd];       
     }
+    free(currentLine); 
 }
 
 int lookupByName(Room* rms[], char* query){
@@ -266,13 +311,39 @@ bool endRoomFound(Room* currentRoom){
     return strcmp(currentRoom->type, "END_ROOM") == 0;
 }
 
-void playerInterface(Room* currentRoom){
-    printf("CURRENT LOCATION: %s\nPOSSIBLE CONNECTIONS:", currentRoom->name);
+void prompt(Room* currentRoom){
+    printf("\nCURRENT LOCATION: %s\nPOSSIBLE CONNECTIONS:", currentRoom->name);
     for(int i = 0; i < currentRoom->numConnections; i++){
         printf(" %s", currentRoom->connections[i]->name);
         printf("%c", (i < currentRoom->numConnections - 1) ? ',' : '.');
     }
     printf("\nWHERE TO? >");
+}
+
+Room* getPlayerInput(Room* rms[], Room* currRoom){
+    Room* destination = currRoom; // Stay in current room unless dest is valid
+    char *playerInput;
+    size_t inputSize = 25;
+
+    playerInput = (char*) malloc(inputSize);
+    if(playerInput == NULL){
+        perror("Error creating user input buffer");
+    }
+
+    memset(playerInput, '\0', inputSize);
+    getline(&playerInput, &inputSize, stdin);
+    playerInput[strcspn(playerInput,"\n")] = 0;
+
+    if( isValidRoom(rms, playerInput) && 
+        isConnected(rms, currRoom, playerInput)){
+    
+        destination = rms[lookupByName(rms, playerInput)];
+    }else{
+        errorMsg();
+    }
+    
+    free(playerInput);
+    return destination;
 }
 
 bool isValidRoom(Room* rms[], char* inputName){
@@ -284,19 +355,28 @@ bool isValidRoom(Room* rms[], char* inputName){
     return false;
 }
 
-void errorMsg(){
-    printf("HUH? I DON'T UNDERSTAND THAT ROOM. TRY AGAIN.\n");
+bool isConnected(Room* rms[], Room* self, char* playerInput){
+    for(int i = 0; i < self->numConnections; i++){
+        if(strcmp(self->connections[i]->name, playerInput) == 0){
+            return true;
+        }
+    }
+    return false;
 }
 
-void gameOverMsg(Room* rms[], int* history[], int numSteps){
-	printf("YOU HAVE FOUND THE END ROOM. CONGRATULATIONS!\n \
-	    YOU TOOK %d STEPS. YOUR PATH TO VICTORY WAS:\n", 
-	    numSteps
-	);
-	
-    for(int i = 0; *(history[i]) < 8; i++){
-        printf("%s\n", rms[i]->name);
-    }
+void errorMsg(){
+    printf("\nHUH? I DON'T UNDERSTAND THAT ROOM. TRY AGAIN.\n");
+}
+
+void gameOverMsg(Room* rms[], int history[], int numSteps){	
+	printf("\nYOU HAVE FOUND THE END ROOM. CONGRATULATIONS!\n");
+	printf("YOU TOOK %d STEPS. YOUR PATH TO VICTORY WAS:\n", numSteps);
+
+    int visited; // Added for readability.
+    for(int i = 0; i < numSteps; i++){
+        visited = history[i];
+        printf("%s\n", rms[visited]->name);
+    }  
 }
 
 
