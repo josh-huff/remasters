@@ -18,11 +18,9 @@ typedef struct Room{
 // Prototypes
 void makeRoomsFromFile(Room* rms[]);
 char* getNewestDir();
-char* getFromFile(FILE* fileHandle, char* option);
-int getNumConnFromFile(FILE* fileHandle);
-void populateRoomArray(Room* rms[], DIR* rdir, char* prefix, char* path);
+void populateRoomArray(Room* rms[], char* prefix);
 void initRoom(Room* rms[], int id, char* name, char* type, int numConn);
-void populateConnections(Room* rms[], char* prefix, char* path);
+void populateConnections(Room* rms[], char* prefix);
 void initConnections(Room* rms[], int id, FILE* fh);
 int lookupByName(Room* rms[], char* query);
 bool endRoomFound(Room* currentRoom);
@@ -38,8 +36,7 @@ int main(){
     Room* currRoom;
     Room* destination;
 
-    int numSteps = 0;    
-    // Generous history size for people who are terrible at mazes, like myself.    
+    int numSteps = 0;        
     int history[128];
     for(int i = 0; i < 128; i++){
         history[i] = 8; // Init to a known impossible value, for debugging
@@ -55,8 +52,7 @@ int main(){
         }
     }
     
-    do{   
-        // Main game loop
+    do{ // Main game loop
         prompt(currRoom);
         destination = getPlayerInput(rooms, currRoom); 
 
@@ -84,76 +80,26 @@ int main(){
     return 0;
 }
 
-void makeRoomsFromFile(Room* rms[]){
-    char fullPath[512]; // Just to shut up gcc warnings. The max is about 50.       
-     
-    // Look in most recent directory    
+void makeRoomsFromFile(Room* rms[]){       
     char* prefix = getNewestDir();
-    memset(fullPath, '\0', 512);
-    snprintf(fullPath, 512, "%s", prefix);
-     
-    DIR* roomsDir = opendir(fullPath);
-    populateRoomArray(rms, roomsDir, prefix, fullPath);       
-    closedir(roomsDir);
-    populateConnections(rms, prefix, fullPath);
+    populateRoomArray(rms, prefix);
+    populateConnections(rms, prefix);
     free(prefix);
 }
 
-char* getFromFile(FILE* fileHandle, char* option){
-    size_t maxLineSize = 40;
-    char* currentLine = malloc(40);
-    char* currentToken;
-    int gl_rv;
-
-    fseek(fileHandle, 0, SEEK_SET);
-    
-    if(strcmp(option, "NAME:") == 0 || strcmp(option, "TYPE:") == 0){
-        char* char_attr = (char*) malloc(50);
-        gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
-
-        while(gl_rv > 0){
-            currentToken = strtok(currentLine, " "); 
-            currentToken = strtok(NULL, " ");
-            if(strcmp(currentToken, option) == 0){
-            currentToken = strtok(NULL, " ");
-
-                memset(char_attr, '\0', 50);
-                strcpy(char_attr, currentToken);
-                char_attr[strcspn(char_attr,"\n")] = 0;
-                free(currentLine);
-                return (void*) char_attr;
-            }
-            gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
-        }           
-    }
-}
-
-int getNumConnFromFile(FILE* fileHandle){
-    size_t maxLineSize = 40;
-    char* currentLine = malloc(40);
-    char* currentToken;
-    int gl_rv;
-    int connCount = 0;
-
-    gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
-    while(gl_rv > 0){
-        currentToken = strtok(currentLine, " ");
-        if(strcmp(currentToken, "CONNECTION") == 0){
-            connCount++;
-        }
-        gl_rv = getline(&currentLine, &maxLineSize, fileHandle);
-    }
-    free(currentLine);
-    return connCount;    
-}
-
-
-void populateRoomArray(Room* rms[], DIR* rdir, char* prefix, char* fullPath){
-    FILE* fH;
+void populateRoomArray(Room* rms[], char* prefix){
+    DIR* rdir = opendir(prefix);
+    FILE* fh;
     struct dirent *currFile;
-    int id, numConnections, i = 0;
-    char* name;
-    char* type;
+    int id, rm_numConnections, i = 0;
+    char* rm_name;
+    char* rm_type;
+    char col1[15];
+    char col2[10];
+    char col3[25];
+
+    char fullPath[512];
+    memset(fullPath, '\0', 512);
     
     while(i < 7){
         currFile = readdir(rdir);
@@ -164,21 +110,34 @@ void populateRoomArray(Room* rms[], DIR* rdir, char* prefix, char* fullPath){
             }
             snprintf(fullPath, 512, "%s/%s", prefix, currFile->d_name);
              
-            fH = fopen(fullPath, "r");
-            if(fH == NULL){
+            fh = fopen(fullPath, "r");
+            if(fh == NULL){
                 perror("Error opening room file for reading.\n");
             }
-           
-            id = i;   
-            name = (char*) getFromFile(fH, "NAME:");
-            numConnections = getNumConnFromFile(fH);
-            type = (char*) getFromFile(fH, "TYPE:");
 
-            initRoom(rms, i, name, type, numConnections);
-            fclose(fH);
+            id = i;
+            rm_name = (char*) malloc(25);
+            rm_type = (char*) malloc(25);
+            memset(rm_name, '\0', 25);
+            memset(rm_type, '\0', 25);
+            
+            while(fscanf(fh, "%s %s %s", col1, col2, col3) != EOF){
+                if(strstr(col2, "NAME")){
+                    strcpy(rm_name, col3); 
+                }else if(strstr(col2, "TYPE")){
+                    strcpy(rm_type, col3);                     
+                }else{
+                    rm_numConnections++;
+                }
+            }
+            
+            initRoom(rms, i, rm_name, rm_type, rm_numConnections);
+            fclose(fh);
+            rm_numConnections = 0;
             i++;
         }
     }
+    closedir(rdir);
 }
 
 // Basic constructor for a room
@@ -194,16 +153,17 @@ void initRoom(Room* rms[], int id, char* name, char* type, int numConn){
     rms[id]->numConnections = numConn;
 }
 
-void populateConnections(Room* rms[], char* prefix, char* fullPath){
-    FILE* fH;
-    memset(fullPath, '\0', 512);
-    snprintf(fullPath, 512, "%s", prefix);
-    DIR* rdir = opendir(fullPath);
+void populateConnections(Room* rms[], char* prefix){
+    DIR* rdir = opendir(prefix);
+    FILE* fh;
     struct dirent *currFile;
+
+    char fullPath[512];
+    memset(fullPath, '\0', 512);
+
     int i = 0;
     while(i < 7){
         currFile = readdir(rdir);
-
         if(currFile){
             if(strcmp(currFile->d_name, ".") == 0 || 
                 strcmp(currFile->d_name, "..") == 0){
@@ -211,16 +171,14 @@ void populateConnections(Room* rms[], char* prefix, char* fullPath){
             }
             snprintf(fullPath, 512, "%s/%s", prefix, currFile->d_name);
           
-            fH = fopen(fullPath, "r");
-            if(fH == NULL){
+            fh = fopen(fullPath, "r");
+            if(fh == NULL){
                 perror("Error opening room file for reading.\n");
             }
             
-            initConnections(rms, i, fH);
-            
-            fclose(fH);
-        }
-        
+            initConnections(rms, i, fh);   
+            fclose(fh);
+        }    
         i++;
     }
     closedir(rdir);
@@ -238,6 +196,7 @@ void initConnections(Room* rms[], int i, FILE* fh){
             connToAdd = lookupByName(rms, col3); 
             rms[i]->connections[k] = rms[connToAdd];
         }
+
         k++;
     }
 }
@@ -339,6 +298,13 @@ void gameOverMsg(Room* rms[], int history[], int numSteps){
         printf("%s\n", rms[visited]->name);
     }  
 }
+
+
+
+
+
+
+
 
 
 
