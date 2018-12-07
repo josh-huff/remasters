@@ -1,4 +1,5 @@
 #include <dirent.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,12 +17,11 @@ typedef struct Room{
 }Room;
 
 // Prototypes
-void makeRoomsFromFile(Room* rms[]);
 char* getNewestDir();
-void populateRoomArray(Room* rms[], char* prefix);
-void initRoom(Room* rms[], int id, char* name, char* type, int numConn);
-void populateConnections(Room* rms[], char* prefix);
-void initConnections(Room* rms[], int id, FILE* fh);
+void commonFileManip(Room* rms[], char* prefix, int option);
+void initRoom(Room* rms[], FILE*, int id);
+void initConnections(Room* rms[], FILE*, int id);
+void initTime(Room* rms[], FILE*, int i);
 int lookupByName(Room* rms[], char* query);
 bool endRoomFound(Room* currentRoom);
 void prompt(Room* currentRoom);
@@ -29,6 +29,8 @@ Room* getPlayerInput(Room* rms[], Room* currRoom);
 bool isConnected(Room* self, char* playerInput);
 void errorMsg();
 void gameOverMsg(Room* rms[], int history[], int numSteps);
+//void* getCurrentTime();
+void getCurrentTime(); //TODO TESTING
 
 int main(){
 
@@ -43,18 +45,22 @@ int main(){
     }
 
     // Populate rooms array with information from latest rooms directory    
-    makeRoomsFromFile(rooms);
+    char* prefix = getNewestDir();
+    commonFileManip(rooms, prefix, 0); // init Rooms
+    commonFileManip(rooms, prefix, 1); // init Connections
+    free(prefix);
     
     // Establish starting room
     for(int i = 0; i < 7; i++){
         if(strcmp(rooms[i]->type, "START_ROOM") == 0){
             currRoom = rooms[i];
+            break;
         }
     }
     
     do{ // Main game loop
         prompt(currRoom);
-        destination = getPlayerInput(rooms, currRoom); 
+        destination = getPlayerInput(rooms, currRoom);
 
         // If choice is valid, update history, number of steps, and current room
         if(destination != currRoom){
@@ -80,117 +86,101 @@ int main(){
     return 0;
 }
 
-void makeRoomsFromFile(Room* rms[]){       
-    char* prefix = getNewestDir();
-    populateRoomArray(rms, prefix);
-    populateConnections(rms, prefix);
-    free(prefix);
-}
+void commonFileManip(Room* rms[], char* prefix, int option){
 
-void populateRoomArray(Room* rms[], char* prefix){
-    DIR* rdir = opendir(prefix);
-    FILE* fh;
-    struct dirent *currFile;
-    int id, rm_numConnections, i = 0;
-    char* rm_name;
-    char* rm_type;
-    char col1[15], col2[10], col3[25], fullPath[512];
-    memset(fullPath, '\0', 512);
+    void (*init_ptr[])(Room* [], FILE*, int) = {   
+        initRoom, 
+        initConnections,  
+        initTime,
+        initTime                                    
+    };
     
-    while(i < 7){
-        currFile = readdir(rdir);
-        if(currFile){    
-            if(strcmp(currFile->d_name, ".") == 0 || 
-                strcmp(currFile->d_name, "..") == 0){
-                continue;
-            }
-            snprintf(fullPath, 512, "%s/%s", prefix, currFile->d_name);
-             
-            fh = fopen(fullPath, "r");
-            if(fh == NULL){
-                perror("Error opening room file for reading.\n");
-            }
-
-            id = i;
-            rm_name = (char*) malloc(25);
-            rm_type = (char*) malloc(25);
-            
-            while(fscanf(fh, "%s %s %s", col1, col2, col3) != EOF){
-                if(strstr(col2, "NAME")){
-                    strcpy(rm_name, col3); 
-                }else if(strstr(col2, "TYPE")){
-                    strcpy(rm_type, col3);                     
-                }else{
-                    rm_numConnections++;
-                }
-            }
-            
-            initRoom(rms, i, rm_name, rm_type, rm_numConnections);
-            fclose(fh);
-            rm_numConnections = 0;
-            i++;
-        }
-    }
-    closedir(rdir);
-}
-
-// Basic constructor for a room
-void initRoom(Room* rms[], int id, char* name, char* type, int numConn){
-    rms[id] = malloc(sizeof(Room));
-    if(rms[id] == NULL){
-        perror("Malloc failed when init'ing room\n");
-    }
-    
-    rms[id]->name = name;
-    rms[id]->id = id;
-    rms[id]->type = type;
-    rms[id]->numConnections = numConn;
-}
-
-void populateConnections(Room* rms[], char* prefix){
-    DIR* rdir = opendir(prefix);
-    FILE* fh;
+    FILE* fh;   
     struct dirent *currFile;
-
     char fullPath[512];
     memset(fullPath, '\0', 512);
-
+    bool wantTime =  (option > 1) ? true : false; 
+    char* fileMode = (option > 2) ? "w" : "r";
+    char* fileName = "currentTime.txt";
+    bool gotTime = false;
     int i = 0;
+    DIR* rdir = opendir(prefix);
+
     while(i < 7){
         currFile = readdir(rdir);
         if(currFile){
-            if(strcmp(currFile->d_name, ".") == 0 || 
-                strcmp(currFile->d_name, "..") == 0){
-                continue;
+            if(wantTime){
+                i = option; // i gets option to loop and call initTime properly        
+                gotTime = true;
+            }else{
+                fileName = currFile->d_name;
+                if(strcmp(currFile->d_name, ".") == 0 || 
+                    strcmp(currFile->d_name, "..") == 0){
+                    continue;
+                }
             }
-            snprintf(fullPath, 512, "%s/%s", prefix, currFile->d_name);
-          
-            fh = fopen(fullPath, "r");
+
+            snprintf(fullPath, 512, "%s/%s", prefix, fileName);
+            fh = fopen(fullPath, fileMode);
             if(fh == NULL){
                 perror("Error opening room file for reading.\n");
             }
-            
-            initConnections(rms, i, fh);   
+// TODO function pointer array with option as an argument   
+            (*init_ptr[option])(rms, fh, i);
             fclose(fh);
+            i++;
+            if(gotTime){
+                break;
+            }
         }    
-        i++;
     }
     closedir(rdir);
 }
 
+void initRoom(Room* rms[], FILE* fh, int id){
+    char col1[15], col2[10], col3[25];    
+    int rm_numConnections = 0;
+
+    rms[id] = malloc(sizeof(Room));
+    char* rm_name = (char*) malloc(25);
+    char* rm_type = (char*) malloc(25);    
+    if(rms[id] == NULL || rm_name == NULL || rm_type == NULL){
+        perror("Malloc failed when init'ing room\n");
+    }
+      
+    while(fscanf(fh, "%s %s %s", col1, col2, col3) != EOF){
+        if(strstr(col2, "NAME")){
+            strcpy(rm_name, col3); 
+        }else if(strstr(col2, "TYPE")){
+            strcpy(rm_type, col3);                     
+        }else{
+            rm_numConnections++;
+        }
+    }
+    
+    rms[id]->name = rm_name;
+    rms[id]->id = id;
+    rms[id]->type = rm_type;
+    rms[id]->numConnections = rm_numConnections;
+}
+
 // Glean connection information for an individual room
-void initConnections(Room* rms[], int i, FILE* fh){
-    int connToAdd, k = -1;
+void initConnections(Room* rms[], FILE* fh, int i){
+    int connToAdd, k = 0;
     char col1[15], col2[10], col3[25];
 
     while(fscanf(fh, "%s %s %s", col1, col2, col3) != EOF){
        if(strstr(col1, "CONNECTION")){
             connToAdd = lookupByName(rms, col3); 
             rms[i]->connections[k] = rms[connToAdd];
+            k++;
         }
-
-        k++;
     }
+}
+
+void initTime(Room* rms[], FILE* fh, int i){
+    char* message = (i > 2) ? "write" : "read";
+    printf("Calling initTime to %s to file.\n", message);
 }
 
 int lookupByName(Room* rms[], char* query){
@@ -251,7 +241,9 @@ Room* getPlayerInput(Room* rms[], Room* currRoom){
     
     // Stay in current room unless dest is valid choice
     int valid = lookupByName(rms, playerInput);
-    if((valid >= 0) && isConnected(currRoom, playerInput)){
+    if(strcmp(playerInput, "time") == 0){
+        getCurrentTime();
+    }else if((valid >= 0) && isConnected(currRoom, playerInput)){
         destination = rms[valid];
     }else{
         errorMsg();
@@ -280,6 +272,14 @@ void gameOverMsg(Room* rms[], int history[], int numSteps){
     for(int i = 0; i < numSteps; i++){
         printf("%s\n", rms[history[i]]->name);
     }  
+}
+
+// One thread calls commonFileManip(), the other reads the result
+// TODO JUST FOR TESTING void* getCurrentTime(){
+void getCurrentTime(){
+    Room* fakeRoom[0]; // Just to satisfy the common parameter.
+    commonFileManip(fakeRoom, ".", 3); // write thread
+    commonFileManip(fakeRoom, ".", 2); // read thread
 }
 
 
