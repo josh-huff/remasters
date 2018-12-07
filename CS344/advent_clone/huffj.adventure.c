@@ -208,7 +208,7 @@ void fetchConnections(Room* rms[], FILE* fh, int i){
         }
     }
 }
-// Reads or writes from currentTime.txt
+// Writes to currentTime file
 void* initTime(void* arg){
     FILE* fh = arg;
     char outputBuffer[50];    
@@ -220,7 +220,7 @@ void* initTime(void* arg){
     
     return NULL;
 }
-//
+// Read time from currentTime file
 void fetchTime(Room* rms[], FILE *fh, int i){
     char inputBuffer[50];
     fgets(inputBuffer, 50, fh);
@@ -246,7 +246,7 @@ Room* getPlayerInput(Room* rms[], Room* currRoom){
     int valid = lookupByName(rms, playerInput);
     if(strcmp(playerInput, "time") == 0){
         printf("\n");
-        commonFileManip(NULL, ".", 3); // Room* fakeRooms[0]; instead?
+        commonFileManip(NULL, ".", 3);
     }else if((valid >= 0) && isConnected(currRoom, playerInput)){
         destination = rms[valid];
     }else{
@@ -291,7 +291,6 @@ void endMsg(Room* rms[], int history[], int numSteps){
     }  
 }
 /*      End of "remaster"; clunkier and dysfunctional original to follow      */
-
 
 
 

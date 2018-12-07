@@ -27,4 +27,18 @@ Adventure:
 
     huffj.adventure.c
     
-        Coming Soon!
+        Looking at the original code is almost as painful to look at as is the 
+        Ark of the Covenant, so I'm pleased to have seen improvements across the
+        board in the remaster.
+    
+        The commonFileManip function is the piece de la resistance. Perhaps it
+        borders on monolithic and might be a little confusing at first, but I 
+        had to integrate the "time" feature and decided to do so by extending
+        that function with a function pointer array so it acts much like a 
+        switch statement (with a clever solution for calling fetchTime() after
+        initTime() writes to the currentTime file, if I do say so myself).
+        
+        This time around, I managed to factor out a LOT of redundancy. It's
+        likely there is even more I can do to slim this down, but going from an 
+        ungainly and buggy 500 lines to a svelt and spry 300 lines is good for
+        me. 
