@@ -94,11 +94,7 @@ void populateRoomArray(Room* rms[], char* prefix){
     int id, rm_numConnections, i = 0;
     char* rm_name;
     char* rm_type;
-    char col1[15];
-    char col2[10];
-    char col3[25];
-
-    char fullPath[512];
+    char col1[15], col2[10], col3[25], fullPath[512];
     memset(fullPath, '\0', 512);
     
     while(i < 7){
@@ -118,8 +114,6 @@ void populateRoomArray(Room* rms[], char* prefix){
             id = i;
             rm_name = (char*) malloc(25);
             rm_type = (char*) malloc(25);
-            memset(rm_name, '\0', 25);
-            memset(rm_type, '\0', 25);
             
             while(fscanf(fh, "%s %s %s", col1, col2, col3) != EOF){
                 if(strstr(col2, "NAME")){
@@ -187,9 +181,7 @@ void populateConnections(Room* rms[], char* prefix){
 // Glean connection information for an individual room
 void initConnections(Room* rms[], int i, FILE* fh){
     int connToAdd, k = -1;
-    char col1[15];
-    char col2[10];
-    char col3[25];
+    char col1[15], col2[10], col3[25];
 
     while(fscanf(fh, "%s %s %s", col1, col2, col3) != EOF){
        if(strstr(col1, "CONNECTION")){
@@ -207,6 +199,7 @@ int lookupByName(Room* rms[], char* query){
             return i;        
         }
     }
+    return -1;
 }
 
 // Returns newest directory with Adventure rooms in it
@@ -251,27 +244,19 @@ void prompt(Room* currentRoom){
 
 Room* getPlayerInput(Room* rms[], Room* currRoom){
     Room* destination = currRoom;
-    char *playerInput;
-    size_t inputSize = 25;
-
-    // Get and validate player input
-    playerInput = (char*) malloc(inputSize);
-    if(playerInput == NULL){
-        perror("Error creating user input buffer");
-    }
-    memset(playerInput, '\0', inputSize);
-    getline(&playerInput, &inputSize, stdin);
-    playerInput[strcspn(playerInput,"\n")] = 0;
-
+    char playerInput[1024];
+    
+    fgets(playerInput, 1024, stdin);
+    playerInput[strlen(playerInput) -1] = '\0';
+    
     // Stay in current room unless dest is valid choice
     int valid = lookupByName(rms, playerInput);
-    if((valid > -1) && (valid <  7) && isConnected(currRoom, playerInput)){
+    if((valid >= 0) && isConnected(currRoom, playerInput)){
         destination = rms[valid];
     }else{
         errorMsg();
     }
     
-    free(playerInput);
     return destination;
 }
 
@@ -292,10 +277,8 @@ void gameOverMsg(Room* rms[], int history[], int numSteps){
 	printf("\nYOU HAVE FOUND THE END ROOM. CONGRATULATIONS!\n");
 	printf("YOU TOOK %d STEPS. YOUR PATH TO VICTORY WAS:\n", numSteps);
 
-    int visited; // Added for readability.
     for(int i = 0; i < numSteps; i++){
-        visited = history[i];
-        printf("%s\n", rms[visited]->name);
+        printf("%s\n", rms[history[i]]->name);
     }  
 }
 
