@@ -8,6 +8,8 @@
 #include <time.h>
 #include <unistd.h>
 
+pthread_mutex_t time_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 typedef struct Room{
 	int id;
 	char* name;
@@ -17,10 +19,11 @@ typedef struct Room{
 }Room;
 
 char* getNewestDir(); // Newest game directory
-void commonFileManip(Room* rms[], char* prefix, int option); // "Switch": inits
-void initRoom(Room* rms[], FILE*, int id); // Initiate room objects
-void initConnections(Room* rms[], FILE*, int id); // Initiate room connections
-void initTime(Room* rms[], FILE*, int i); // Initiate second thread: time call
+void commonFileManip(Room* rms[], char* prefix, int option); // Fetch switch
+void fetchRoom(Room* rms[], FILE*, int id); // Fetch room objects
+void fetchConnections(Room* rms[], FILE*, int id); // Fetch room connections
+void fetchTime(Room* rms[], FILE*, int i); // Fetch time from file
+void* initTime(void* arg); // Initiate second thread: time call
 int lookupByName(Room* rms[], char* query); // Room index in array
 void prompt(Room* currentRoom); // Print current room and valid next steps
 Room* getPlayerInput(Room* rms[], Room* currRoom); // Next valid move (or self)
@@ -28,7 +31,6 @@ bool isConnected(Room* self, char* playerInput); // True if rooms are connected
 void errorMsg(); // Print error message
 bool endRoomFound(Room* currentRoom); // True if game is over
 void endMsg(Room* rms[], int history[], int numSteps);// Print player history
-void* getCurrentTime(); //TODO TESTING
 
 int main(){
 
@@ -44,8 +46,8 @@ int main(){
 
     // Populate rooms array with information from latest rooms directory    
     char* prefix = getNewestDir();
-    commonFileManip(rooms, prefix, 0); // init Rooms
-    commonFileManip(rooms, prefix, 1); // init Connections
+    commonFileManip(rooms, prefix, 0); // fetch Rooms
+    commonFileManip(rooms, prefix, 1); // fetch Connections
     free(prefix);
     
     // Establish starting room
@@ -69,7 +71,7 @@ int main(){
 
         // Loop only ends when END_ROOM is found
         if(endRoomFound(currRoom)){
-            gameOverMsg(rooms, history, numSteps);            
+            endMsg(rooms, history, numSteps);            
             break;
         }
     }while(true);
@@ -109,51 +111,57 @@ char* getNewestDir(){
     closedir(currentDir);  
     return newestDir;
 }
-// "Switch" for the various init functions. Handles most file manipulation
+// "Switch" for the various fetch functions. Handles most file manipulation
 void commonFileManip(Room* rms[], char* prefix, int option){
 
-    void (*init_ptr[])(Room* [], FILE*, int) = {   
-        initRoom, 
-        initConnections,  
-        initTime,
-        initTime                                    
+    void (*fetch_ptr[])(Room* [], FILE*, int) = {   
+        fetchRoom, fetchConnections, fetchTime                                   
     };
-    
+
+    pthread_t write_time;    
     FILE* fh;   
     struct dirent *currFile;
     char fullPath[512];
     memset(fullPath, '\0', 512);
-    bool wantTime =  (option > 1) ? true : false; 
-    char* fileMode = (option > 2) ? "w" : "r";
+    char* fileMode = "r";
     char* fileName = "currentTime.txt";
-    bool gotTime = false;
     int i = 0;
     DIR* rdir = opendir(prefix);
 
     while(i < 7){
         currFile = readdir(rdir);
         if(currFile){
-            if(wantTime){
-                i = option; // i gets option to loop and call initTime properly        
-                gotTime = true;
-            }else{
-                fileName = currFile->d_name;
-                if(strcmp(currFile->d_name, ".") == 0 || 
-                    strcmp(currFile->d_name, "..") == 0){
-                    continue;
-                }
+            switch(option){
+                case 0:
+                case 1:
+                    fileName = currFile->d_name;
+                    if(strlen(fileName) < 3){
+                        continue;
+                    }
+                    break;             
+                case 3:
+                    fileMode = "w";                                  
             }
-
-            snprintf(fullPath, 512, "%s/%s", prefix, fileName);
+            snprintf(fullPath, 512, "%s/%s", prefix, fileName);       
             fh = fopen(fullPath, fileMode);
             if(fh == NULL){
                 perror("Error opening room file for reading.\n");
             }
-            // Function pointer array with option as an argument   
-            (*init_ptr[option])(rms, fh, i);
-            fclose(fh);
+            
+            if(option != 3){
+                (*fetch_ptr[option])(rms, fh, i);    
+                fclose(fh);
+            }else{          
+
+                pthread_mutex_lock(&time_mutex);
+                pthread_create(&write_time, NULL, initTime, fh);
+                pthread_mutex_unlock(&time_mutex);            
+                pthread_join(write_time, NULL);
+                fclose(fh);
+                commonFileManip(rms, prefix, 2); // done writing, so read
+            }
             i++;
-            if(gotTime){
+            if(option == 2 || option == 3){
                 break;
             }
         }    
@@ -161,7 +169,7 @@ void commonFileManip(Room* rms[], char* prefix, int option){
     closedir(rdir);
 }
 // Instantiate room from corresponding file
-void initRoom(Room* rms[], FILE* fh, int id){
+void fetchRoom(Room* rms[], FILE* fh, int id){
     char col1[15], col2[10], col3[25];    
     int rm_numConnections = 0;
 
@@ -169,7 +177,7 @@ void initRoom(Room* rms[], FILE* fh, int id){
     char* rm_name = (char*) malloc(25);
     char* rm_type = (char*) malloc(25);    
     if(rms[id] == NULL || rm_name == NULL || rm_type == NULL){
-        perror("Malloc failed when init'ing room\n");
+        perror("Malloc failed when fetch'ing room\n");
     }
       
     while(fscanf(fh, "%s %s %s", col1, col2, col3) != EOF){
@@ -188,7 +196,7 @@ void initRoom(Room* rms[], FILE* fh, int id){
     rms[id]->numConnections = rm_numConnections;
 }
 // Glean connection information for an individual room
-void initConnections(Room* rms[], FILE* fh, int i){
+void fetchConnections(Room* rms[], FILE* fh, int i){
     int connToAdd, k = 0;
     char col1[15], col2[10], col3[25];
 
@@ -201,9 +209,22 @@ void initConnections(Room* rms[], FILE* fh, int i){
     }
 }
 // Reads or writes from currentTime.txt
-void initTime(Room* rms[], FILE* fh, int i){
-    char* message = (i > 2) ? "write" : "read";
-    printf("Calling initTime to %s to file.\n", message);
+void* initTime(void* arg){
+    FILE* fh = arg;
+    char outputBuffer[50];    
+    time_t rawTime = time(0);
+    struct tm* currentTime = localtime(&rawTime);
+
+	strftime(outputBuffer, 50, "%l:%M%P, %A, %B%e, %Y", currentTime); 
+    fprintf(fh, "%s\n", outputBuffer);
+    
+    return NULL;
+}
+//
+void fetchTime(Room* rms[], FILE *fh, int i){
+    char inputBuffer[50];
+    fgets(inputBuffer, 50, fh);
+    printf("%s\n", inputBuffer);
 }
 // Prints the game prompt
 void prompt(Room* currentRoom){
@@ -224,7 +245,8 @@ Room* getPlayerInput(Room* rms[], Room* currRoom){
     
     int valid = lookupByName(rms, playerInput);
     if(strcmp(playerInput, "time") == 0){
-        getCurrentTime();
+        printf("\n");
+        commonFileManip(NULL, ".", 3); // Room* fakeRooms[0]; instead?
     }else if((valid >= 0) && isConnected(currRoom, playerInput)){
         destination = rms[valid];
     }else{
@@ -233,25 +255,6 @@ Room* getPlayerInput(Room* rms[], Room* currRoom){
     
     return destination;
 }
-// Prints the current time with a second thread
-void* getCurrentTime(){
-    Room* fakeRooms[0]; // Just to satisfy the common parameter.
-    commonFileManip(fakeRooms, ".", 3); // write thread (second)
-    commonFileManip(fakeRooms, ".", 2); // read thread (main)
-
-    char outputBuffer[50];    
-    time_t rawTime = time(0);
-    struct tm* currentTime = localtime(&rawTime);
-
-	strftime(outputBuffer, 50, "%l:%M%P, %A, %B %e, %Y", currentTime); 
-    printf("%s\n", outputBuffer);
-}
-/*
-Main thread locks a mutex, then spawns the second thread 
-Second thread's is blocked when it tries controlling the mutex by calling lock() 
-The second thread is started up again by the first thread calling unlock().
-A thread can be told to wait for another to complete with the join() function.
-*/
 // Return a room's index in the rooms array, or -1 if not found
 int lookupByName(Room* rms[], char* query){
     for(int i = 0; i < 7; i++){
@@ -279,7 +282,7 @@ bool endRoomFound(Room* currentRoom){
     return strcmp(currentRoom->type, "END_ROOM") == 0;
 }
 // Prints a game-over message, including the player's step history
-void gameOverMsg(Room* rms[], int history[], int numSteps){	
+void endMsg(Room* rms[], int history[], int numSteps){	
 	printf("\nYOU HAVE FOUND THE END ROOM. CONGRATULATIONS!\n");
 	printf("YOU TOOK %d STEPS. YOUR PATH TO VICTORY WAS:\n", numSteps);
 
@@ -287,7 +290,7 @@ void gameOverMsg(Room* rms[], int history[], int numSteps){
         printf("%s\n", rms[history[i]]->name);
     }  
 }
-/*       End of "remaster"; clunky and dysfunctional original to follow       */
+/*      End of "remaster"; clunkier and dysfunctional original to follow      */
 
 
 
